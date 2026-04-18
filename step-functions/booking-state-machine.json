@@ -1,0 +1,93 @@
+{
+  "Comment": "LiveStage booking workflow",
+  "StartAt": "ValidateAvailability",
+  "States": {
+    "ValidateAvailability": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-validate-availability",
+      "Next": "CheckAvailability",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "BookingFailed"
+        }
+      ]
+    },
+    "CheckAvailability": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.available",
+          "BooleanEquals": true,
+          "Next": "ReserveSeat"
+        }
+      ],
+      "Default": "NotifyUnavailable"
+    },
+    "ReserveSeat": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-reserve-seat",
+      "Next": "ProcessPayment"
+    },
+    "ProcessPayment": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-process-payment",
+      "Next": "WaitForConfirmation",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PaymentFailed"
+        }
+      ]
+    },
+    "WaitForConfirmation": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "ConfirmBooking"
+    },
+    "ConfirmBooking": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-confirm-booking",
+      "Next": "PublishEvent"
+    },
+    "PublishEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-notify-user",
+      "Next": "BookingSuccess"
+    },
+    "NotifyUnavailable": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-notify-user",
+      "Next": "BookingFailed"
+    },
+    "PaymentFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:323748450739:function:livestage-notify-user",
+      "Next": "BookingFailed"
+    },
+    "BookingFailed": {
+      "Type": "Fail",
+      "Error": "BookingError",
+      "Cause": "Booking could not be completed"
+    },
+    "BookingSuccess": {
+      "Type": "Succeed"
+    }
+  }
+}
